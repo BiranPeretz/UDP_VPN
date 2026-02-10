@@ -1,0 +1,256 @@
+socket:
+1) internet socket
+2) udp sockets SOCK_DGRM
+
+
+structs:
+1)struct addrinfo - used to prep the socket address structures for subsequent use
+
+    struct addrinfo {
+        int              ai_flags;     // AI_PASSIVE, AI_CANONNAME, etc.
+        int              ai_family;    // AF_INET, AF_INET6, AF_UNSPEC
+        int              ai_socktype;  // SOCK_STREAM, SOCK_DGRAM
+        int              ai_protocol;  // use 0 for "any"
+        size_t           ai_addrlen;   // size of ai_addr in bytes
+        struct sockaddr *ai_addr;      // struct sockaddr_in or _in6
+        char            *ai_canonname; // full canonical hostname
+
+        struct addrinfo *ai_next;      // linked list, next node
+    };
+
+2)struct sockaddr - holds socket address information for many types of sockets:
+    struct sockaddr {
+        unsigned short    sa_family;    // address family, AF_xxx
+        char              sa_data[14];  // 14 bytes of protocol address
+    }; 
+
+3)struct sockaddr_in is specifically for ipv4 and can be casted to sockaddr (and vice versa)
+    // (IPv4 only--see struct sockaddr_in6 for IPv6)
+
+    struct sockaddr_in {
+        short int          sin_family;  // Address family, AF_INET
+        unsigned short int sin_port;    // Port number
+        struct in_addr     sin_addr;    // Internet address
+        unsigned char      sin_zero[8]; // Same size as struct sockaddr
+    };
+
+
+4)struct in_addr
+    // (IPv4 only--see struct in6_addr for IPv6)
+
+    // Internet address (a structure for historical reasons)
+    struct in_addr {
+        uint32_t s_addr; // that's a 32-bit int (4 bytes)
+    };
+
+
+
+
+functions/snippits:
+1) convert ipv4 string to in_addr + inject it to sockaddr_in:
+    inet_pton(AF_INET, "xxx.xxx.xxx.xxx", &(sa.sin_addr)); //returns 0 on success or -1 on error
+
+2) convert sockaddr_in 's in_addr to a string:
+    inet_ntop(AF_INET, &(sa.sin_addr), ip4, INET_ADDRSTRLEN);
+    //USED ARGUMENTS:  AF_INET = ipv4 constant, sa=sockaddr_in and sin_addr=it's in_addr, ipv4=string to store, INET_ADDRSTRLEN=len of ipv4 string constant
+
+3) getaddrinfo() - 
+    int getaddrinfo(const char *node,   // e.g. "www.example.com" or IP string
+                    const char *service,  // e.g. "http" or port number string
+                    const struct addrinfo *hints, //pointer to struct addrinfo you already filled out with information
+                    struct addrinfo **res); /*pointer to linkedlist results  of struct addrinfo each of which contains a struct sockaddr of some kind that we can use later */
+
+
+4) socket() - Get the File Descriptor: //socket descriptor that you can use in later system calls, or -1 on error
+    #include <sys/types.h>
+    #include <sys/socket.h>
+
+
+    int socket( int domain, //PF_INET for ipv4 or PF_INET6 for ipv6
+                int type,   //SOCK_STREAM or SOCK_DGRAM (the socket type, SOCK_STREAM for tcp and SOCK_DGRAM for udp)
+                int protocol); //protocol can be set to 0 to choose the proper protocol for the given type
+
+4.1) usage of getaddrinfo() into socket():
+
+    int s;
+    struct addrinfo hints, *res;
+
+    // do the lookup
+    // [pretend we already filled out the "hints" struct]
+    getaddrinfo("www.example.com", "http", &hints, &res);
+
+    // again, you should do error-checking on getaddrinfo(), and walk
+    // the "res" linked list looking for valid entries instead of just
+    // assuming the first one is good (like many of these examples do).
+    // See the section on client/server for real examples.
+
+    s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+
+5) bind() - assosiate a socket to to a port on the machine:     //returns -1 on error and sets errno to the error’s value.
+
+    #include <sys/types.h>
+    #include <sys/socket.h>
+
+    int bind(   int sockfd,     //the socket file descriptor returned by socket()
+                struct sockaddr *my_addr,   /* a pointer to a struct sockaddr that contains information about your address, namely, port and IP address */
+                int addrlen);   //the length in bytes of that address
+
+
+5.1) bind usage example:
+
+    struct addrinfo hints, *res;
+    int sockfd;
+
+    // first, load up address structs with getaddrinfo():
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+
+    getaddrinfo(NULL, "3490", &hints, &res);
+
+    // make a socket:
+
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+    // bind it to the port we passed in to getaddrinfo():
+
+    bind(sockfd, res->ai_addr, res->ai_addrlen);
+
+
+
+6) connect()- When connect() is called, it attempts to initiate a connection to the specified server.
+    For stream sockets (TCP), connect() attempts to establish a reliable, ordered, two-way connection. It may block until the connection is established or an error occurs, unless the socket is set to non-blocking mode.
+    For datagram sockets (UDP), connect() does not establish a persistent connection but rather associates the socket with a specific peer address, allowing subsequent send() and recv() calls to implicitly use that address.
+    
+    //return -1 on error and set the variable errno.
+    
+    
+        #include <sys/types.h>
+        #include <sys/socket.h>
+
+        int connect(int sockfd,     //socket file descriptor, as returned by the socket() call
+                    struct sockaddr *serv_addr,     //a struct sockaddr containing the destination port and IP address
+                    int addrlen);   // the length in bytes of the server address structure
+
+
+
+6.1) connect() example:
+    struct addrinfo hints, *res;
+    int sockfd;
+
+    // first, load up address structs with getaddrinfo():
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    getaddrinfo("www.example.com", "3490", &hints, &res);
+
+    // make a socket:
+
+    sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+
+    // connect!
+
+    connect(sockfd, res->ai_addr, res->ai_addrlen);
+
+
+
+
+7) listen() — Will somebody please call me //listen() returns -1 and sets errno on error
+
+    int listen( int sockfd,     // the usual socket file descriptor from the socket() system call
+                int backlog);   /* 
+                                  backlog is the number of connections allowed on the incoming queue. What does that mean? Well, incoming connections are going to wait in this queue until you accept() them (see below) and this is the limit on how many can queue up. Most systems silently limit this number to about 20; you can probably get away with setting it to 5 or 10.  */
+
+7.1) before calling connect() call:
+        getaddrinfo();
+        socket();
+        bind();
+        listen();
+        /* accept() goes here */ 
+
+
+
+8) accept() - accept a waiting (aka listen() ed) connect():     //returns -1 and sets errno if an error occurs
+
+    #include <sys/types.h>
+    #include <sys/socket.h>
+
+    int accept( int sockfd,     //sockfd is the listen()ing socket descriptor
+                struct sockaddr *addr,  //pointer to a local struct sockaddr_storage to store incoming info on
+                socklen_t *addrlen);    /* 
+                                            addrlen is a local integer variable that should be set to sizeof(struct sockaddr_storage) before its address is passed to accept(). accept() will not put more than that many bytes into addr. If it puts fewer in, it’ll change the value of addrlen to reflect that. */
+
+
+
+8.1) accept usage example:
+
+    #include <string.h>
+    #include <sys/types.h>
+    #include <sys/socket.h>
+    #include <netdb.h>
+
+    #define MYPORT "3490"  // the port users will be connecting to
+    #define BACKLOG 10     // how many pending connections queue holds
+
+    int main(void)
+    {
+        struct sockaddr_storage their_addr;
+        socklen_t addr_size;
+        struct addrinfo hints, *res;
+        int sockfd, new_fd;
+
+        // !! don't forget your error checking for these calls !!
+
+        // first, load up address structs with getaddrinfo():
+
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+
+        getaddrinfo(NULL, MYPORT, &hints, &res);
+
+        // make a socket, bind it, and listen on it:
+
+        sockfd = socket(res->ai_family, res->ai_socktype,
+                                                    res->ai_protocol);
+        bind(sockfd, res->ai_addr, res->ai_addrlen);
+        listen(sockfd, BACKLOG);
+
+        // now accept an incoming connection:
+
+        addr_size = sizeof their_addr;
+        new_fd = accept(sockfd, (struct sockaddr *)&their_addr,
+                                                        &addr_size);
+
+        // ready to communicate on socket descriptor new_fd!
+
+int send(int sockfd, const void *msg, int len, int flags); 
+
+
+9) send() - send to a connect() ed socket:  //return -1 on error and errno is set to the error number OR the number of bytes actually sent out—this might be less than the number you told it to send
+    int send(   int sockfd,         //the socket descriptor you want to send data to (whether it’s the one returned by socket() or the one you got with accept()
+                const void *msg,    //pointer to the data you want to send
+                int len,            //length of that message data in bytes
+                int flags);         //Just set flags to 0
+
+
+9.1) example code for send():
+    char *msg = "Beej was here!";
+    int len, bytes_sent;
+    .
+    .
+    .
+    len = strlen(msg);
+    bytes_sent = send(sockfd, msg, len, 0);
+    .
+    .
+
+
+
+10)
