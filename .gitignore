@@ -1,0 +1,28 @@
+# Compiled object files
+*.o
+*.obj
+
+# Executables
+*.exe
+*.out
+
+# Debug files
+*.log
+*.tmp
+
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Build directories
+/build/
+/bin/
+/debug/
+
+# Backup files
+*~
+
+# tun/tap device files
+/dev/net/tun
