@@ -1,3 +1,3 @@
-# VPN UDP
+# UDP VPN
 
 This project implements a lightweight UDP-based VPN tunnel in C that enables secure point-to-point network communication by encapsulating IP packets over a UDP connection between a client and server. The implementation utilizes TUN (Tunnel) devices to create virtual network interfaces on both endpoints, allowing applications to transparently route traffic through the VPN tunnel. The server listens on a specified UDP port and manages routing configuration, including IP forwarding and NAT masquerading to bridge traffic between the VPN network and external interfaces, while the client establishes a UDP connection to the server and handles bidirectional packet forwarding between its local TUN device and the remote server.
